@@ -9,6 +9,7 @@ from rich.live import Live
 from rich.table import Table
 from rich import box
 from rich.panel import Panel
+from rich.prompt import Prompt, IntPrompt, FloatPrompt, Confirm
 
 from .pdf_utils import extract_pdf
 from .cache import JsonlCache
@@ -36,6 +37,7 @@ def main(argv: List[str] = None) -> int:
     parser.add_argument("--max-chars", type=int, default=4000, help="청크 최대 문자수")
     parser.add_argument("--clusters", type=int, default=3, help="클러스터 수")
     parser.add_argument("--max-tokens", type=int, default=512, help="LLM 최대 출력 토큰")
+    parser.add_argument("--interactive", action="store_true", help="실행 전 대화형으로 옵션 수정")
 
     args = parser.parse_args(argv)
 
@@ -43,6 +45,25 @@ def main(argv: List[str] = None) -> int:
     input_dir = args.input_dir
     artifacts_dir = args.artifacts_dir
     report_dir = args.report_dir
+
+    # Interactive configuration (optional)
+    if args.interactive:
+        if sys.stdin.isatty():
+            console.print("[cyan]대화형 설정 모드: 옵션을 수정하려면 입력하세요. (Enter로 기본값 유지)[/cyan]")
+            try:
+                input_dir = Prompt.ask("입력 폴더", default=input_dir)
+                artifacts_dir = Prompt.ask("아티팩트 폴더", default=artifacts_dir)
+                report_dir = Prompt.ask("리포트 폴더", default=report_dir)
+                args.model = Prompt.ask("LM Studio 모델", default=args.model)
+                args.lmstudio_url = Prompt.ask("LM Studio URL", default=args.lmstudio_url)
+                args.temperature = FloatPrompt.ask("Temperature", default=args.temperature)
+                args.max_chars = IntPrompt.ask("청크 최대 문자수", default=args.max_chars)
+                args.max_tokens = IntPrompt.ask("LLM 최대 출력 토큰", default=args.max_tokens)
+                args.clusters = IntPrompt.ask("클러스터 수", default=args.clusters)
+            except Exception:
+                console.print("[red]대화형 입력 처리 중 오류가 발생했습니다. 기본값으로 진행합니다.[/red]\n")
+        else:
+            console.print("[yellow]표준 입력이 TTY가 아닙니다. 대화형 모드를 건너뜁니다.[/yellow]")
 
     os.makedirs(artifacts_dir, exist_ok=True)
     os.makedirs(report_dir, exist_ok=True)

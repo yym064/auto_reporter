@@ -30,6 +30,10 @@
 - 기본 실행(예시 데이터 폴더 사용):
   - `python3 -m src.paper_analyzer.cli --input-dir sample_data`
 
+- 대화형 실행(옵션 수정):
+  - `python3 -m src.paper_analyzer.cli --input-dir sample_data --interactive`
+  - 실행 전 입력 폴더, 아티팩트/리포트 폴더, 모델/URL, temperature, 청크/토큰/클러스터 수를 프롬프트로 수정 가능
+
 - 주요 옵션:
   - `--artifacts-dir`: 아티팩트 출력 폴더(기본 `artifacts`)
   - `--report-dir`: 보고서 출력 폴더(기본 `report`)

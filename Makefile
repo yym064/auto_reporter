@@ -58,6 +58,11 @@ conda-dev: conda-check
 conda-run: conda-check
 	$(CONDA) run -n $(ENV_NAME) python -m src.paper_analyzer.cli --input-dir ./sample_data
 
+# Run interactive mode inside conda env
+.PHONY: conda-run-interactive
+conda-run-interactive: conda-check
+	$(CONDA) run -n $(ENV_NAME) python -m src.paper_analyzer.cli --input-dir ./sample_data --interactive
+
 # Note: `conda activate` does not persist in Make; run this in your shell
 activate:
 	@echo "Run in your shell:"
