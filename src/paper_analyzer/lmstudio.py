@@ -14,12 +14,15 @@ class LMStudioClient:
         api_key: Optional[str] = None,
         cache: Optional[JsonlCache] = None,
         timeout: int = 120,
+        pre_messages: Optional[List[Dict[str, str]]] = None,
     ) -> None:
         self.model = model
         self.base_url = base_url or os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
         self.api_key = api_key or os.getenv("LMSTUDIO_API_KEY", "lm-studio")
         self.cache = cache
         self.timeout = timeout
+        # Optional messages to prepend to every request (e.g., instruction.md)
+        self.pre_messages: List[Dict[str, str]] = pre_messages or []
 
     def _headers(self) -> Dict[str, str]:
         return {
@@ -34,10 +37,20 @@ class LMStudioClient:
         max_tokens: Optional[int] = None,
     ) -> str:
         """Try chat.completions; on 400 fallback to completions."""
+        # Merge any pre_messages so that custom system instructions come last among system messages
+        if self.pre_messages:
+            sys_msgs = [m for m in messages if m.get("role") == "system"]
+            other_msgs = [m for m in messages if m.get("role") != "system"]
+            pre_sys = [m for m in self.pre_messages if m.get("role") == "system"]
+            pre_other = [m for m in self.pre_messages if m.get("role") != "system"]
+            merged_messages = sys_msgs + pre_sys + pre_other + other_msgs
+        else:
+            merged_messages = messages
+
         chat_url = f"{self.base_url.rstrip('/')}/chat/completions"
         chat_payload: Dict[str, Any] = {
             "model": self.model,
-            "messages": messages,
+            "messages": merged_messages,
             "temperature": temperature,
         }
         if max_tokens is not None:
@@ -72,7 +85,7 @@ class LMStudioClient:
             return "\n".join(lines)
 
         comp_url = f"{self.base_url.rstrip('/')}/completions"
-        prompt = _messages_to_prompt(messages)
+        prompt = _messages_to_prompt(merged_messages)
         comp_payload: Dict[str, Any] = {
             "model": self.model,
             "prompt": prompt,

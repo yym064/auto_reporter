@@ -37,6 +37,7 @@ def main(argv: List[str] = None) -> int:
     parser.add_argument("--max-chars", type=int, default=4000, help="청크 최대 문자수")
     parser.add_argument("--clusters", type=int, default=3, help="클러스터 수")
     parser.add_argument("--max-tokens", type=int, default=512, help="LLM 최대 출력 토큰")
+    parser.add_argument("--instruction-file", default=None, help="사전 지시 사항 파일 경로 (기본: ./instruction.md 존재 시 자동 사용)")
     parser.add_argument("--interactive", action="store_true", help="실행 전 대화형으로 옵션 수정")
 
     args = parser.parse_args(argv)
@@ -69,7 +70,27 @@ def main(argv: List[str] = None) -> int:
     os.makedirs(report_dir, exist_ok=True)
 
     cache = JsonlCache(os.path.join(artifacts_dir, "cache"))
-    client = LMStudioClient(model=args.model, base_url=args.lmstudio_url, cache=cache)
+
+    # Load optional instruction.md and pass as pre system message
+    pre_messages: List[Dict[str, str]] = []
+    instr_path: Optional[str] = None
+    if args.instruction_file:
+        instr_path = args.instruction_file
+    else:
+        default_path = os.path.join(os.getcwd(), "instruction.md")
+        if os.path.isfile(default_path):
+            instr_path = default_path
+    if instr_path and os.path.isfile(instr_path):
+        try:
+            with open(instr_path, "r", encoding="utf-8") as f:
+                instr_text = f.read().strip()
+            if instr_text:
+                pre_messages.append({"role": "system", "content": instr_text})
+                console.print(f"[green]instruction.md 적용:[/green] {instr_path}")
+        except Exception as e:
+            console.print(f"[yellow]instruction.md 읽기 실패:[/yellow] {e}\n")
+
+    client = LMStudioClient(model=args.model, base_url=args.lmstudio_url, cache=cache, pre_messages=pre_messages)
 
     pdfs = find_pdfs(input_dir)
     if not pdfs:

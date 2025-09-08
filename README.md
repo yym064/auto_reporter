@@ -43,6 +43,12 @@
   - `--max-chars`: 청크 최대 문자수(기본 `4000`)
   - `--max-tokens`: LLM 출력 토큰 상한(기본 `512`)
   - `--clusters`: 클러스터 수(기본 `3`)
+  - `--instruction-file`: 사전 지시 파일 경로. 미지정 시 현재 작업 디렉터리의 `instruction.md`가 있으면 자동 적용
+
+## instruction.md 사전 지시 적용
+- 프로젝트 실행 시 현재 작업 디렉터리에 `instruction.md` 파일이 존재하면 내용을 읽어 LLM 요청마다 시스템 메시지로 자동 첨부합니다.
+- 우선순위 규칙: 내부 기본 시스템 메시지(예: "You are a helpful research assistant.") 다음에 `instruction.md`가 추가되어, 커스텀 지시가 우선 적용됩니다.
+- 경로를 직접 지정하려면 `--instruction-file /path/to/instruction.md` 옵션을 사용하세요.
 
 ## 진행 표시(Progress)
 - 전체 진행바: "총 N개 PDF 처리" 기준으로 1개 문서 완료 시 1씩 증가
