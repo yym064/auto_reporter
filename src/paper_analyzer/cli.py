@@ -5,7 +5,10 @@ import sys
 from typing import Dict, List, Optional
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.live import Live
+from rich.table import Table
+from rich import box
+from rich.panel import Panel
 
 from .pdf_utils import extract_pdf
 from .cache import JsonlCache
@@ -54,46 +57,85 @@ def main(argv: List[str] = None) -> int:
 
     results: List[Dict] = []
 
-    overall_task_desc = f"총 {len(pdfs)}개 PDF 처리"
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold blue]{task.description}"),
-        BarColumn(),
-        TextColumn("{task.completed}/{task.total}"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task_overall = progress.add_task(overall_task_desc, total=len(pdfs))
+    # TODO-style dashboard state
+    def _icon(status: str) -> str:
+        return {
+            "pending": "[dim]□[/dim]",
+            "in_progress": "[yellow]◐[/yellow]",
+            "done": "[green]■[/green]",
+            "failed": "[red]×[/red]",
+        }.get(status, status)
 
+    tasks: Dict[str, Dict] = {}
+    for pdf_path in pdfs:
+        pid = os.path.splitext(os.path.basename(pdf_path))[0]
+        tasks[pid] = {
+            "paper_path": pdf_path,
+            "title": pid,
+            "extract": "pending",
+            "summarize": "pending",
+            "combine": "pending",
+            "chunks_total": 0,
+            "chunks_done": 0,
+        }
+
+    report_status = "pending"
+
+    def render_dashboard() -> Panel:
+        table = Table(box=box.SIMPLE_HEAVY, show_lines=False)
+        table.add_column("Paper", overflow="fold")
+        table.add_column("Extract", justify="center", width=10)
+        table.add_column("Summarize", justify="center", width=12)
+        table.add_column("Combine", justify="center", width=10)
+        table.add_column("Chunks", justify="right", width=10)
+        for pid, st in tasks.items():
+            name = st.get("title") or pid
+            chunks = st.get("chunks_done", 0)
+            total = st.get("chunks_total", 0)
+            table.add_row(
+                name,
+                _icon(st["extract"]),
+                _icon(st["summarize"]),
+                _icon(st["combine"]),
+                f"{chunks}/{total}" if total else "-",
+            )
+        footer = f"Report: {_icon(report_status)}  |  총 {len(pdfs)}개 PDF"
+        return Panel(table, title="처리 현황 (TODO)", subtitle=footer, padding=(1,1))
+
+    with Live(render_dashboard(), console=console, refresh_per_second=6) as live:
+        # Process each paper
         for pdf_path in pdfs:
-            progress.log(f"[green]추출 중:[/green] {pdf_path}")
+            pid = os.path.splitext(os.path.basename(pdf_path))[0]
+            # Update title from metadata after extraction
+            tasks[pid]["extract"] = "in_progress"
+            live.update(render_dashboard())
+
             try:
                 info = extract_pdf(pdf_path, artifacts_dir)
+                title = info["metadata"].get("title") or info["paper_id"]
+                tasks[pid]["title"] = title
+                tasks[pid]["extract"] = "done"
+                live.update(render_dashboard())
             except Exception as e:
+                tasks[pid]["extract"] = "failed"
+                live.update(render_dashboard())
                 console.print(f"[red]추출 실패[/red] {pdf_path}: {e}")
-                progress.advance(task_overall)
                 continue
 
-            title = info["metadata"].get("title") or info["paper_id"]
-            sub_desc = f"요약 준비: {title}"
-            task_sub: Optional[int] = progress.add_task(sub_desc, total=0)
-
             def on_progress(event: str, data: Dict):
-                nonlocal task_sub
-                try:
-                    if event == "chunking_done":
-                        total = int(data.get("chunks") or 0)
-                        progress.update(task_sub, total=total, completed=0, description=f"요약 중: {title}")
-                        if total == 0:
-                            progress.update(task_sub, description=f"요약 건너뜀: {title}")
-                    elif event == "chunk_summarized":
-                        progress.advance(task_sub, 1)
-                    elif event == "combining":
-                        progress.update(task_sub, description=f"결과 통합 중: {title}")
-                    elif event == "paper_done":
-                        progress.update(task_sub, description=f"완료: {title}")
-                except Exception:
-                    pass
+                st = tasks[pid]
+                if event == "chunking_done":
+                    st["summarize"] = "in_progress"
+                    st["chunks_total"] = int(data.get("chunks") or 0)
+                    st["chunks_done"] = 0
+                elif event == "chunk_summarized":
+                    st["chunks_done"] = min(st.get("chunks_done", 0) + 1, st.get("chunks_total", 0))
+                elif event == "combining":
+                    st["combine"] = "in_progress"
+                elif event == "paper_done":
+                    st["summarize"] = "done"
+                    st["combine"] = "done"
+                live.update(render_dashboard())
 
             try:
                 summary = summarize_single_paper(
@@ -105,9 +147,19 @@ def main(argv: List[str] = None) -> int:
                     max_output_tokens=args.max_tokens,
                     on_progress=on_progress,
                 )
+                # If no callbacks fired (e.g., empty text), mark as done appropriately
+                if tasks[pid]["summarize"] == "pending":
+                    tasks[pid]["summarize"] = "done"
+                if tasks[pid]["combine"] == "pending":
+                    tasks[pid]["combine"] = "done"
             except Exception as e:
                 console.print(f"[red]요약 실패[/red] {pdf_path}: {e}")
+                tasks[pid]["summarize"] = "failed"
+                if tasks[pid]["combine"] == "in_progress":
+                    tasks[pid]["combine"] = "failed"
                 summary = "요약 생성 실패 (LM Studio 서버 동작 여부 확인 필요)"
+            finally:
+                live.update(render_dashboard())
 
             results.append(
                 {
@@ -119,16 +171,9 @@ def main(argv: List[str] = None) -> int:
                 }
             )
 
-            try:
-                if task_sub is not None:
-                    progress.remove_task(task_sub)
-            except Exception:
-                pass
-
-            progress.advance(task_overall)
-
-        # Synthesis
-        progress.log("[cyan]전체 종합 요약 생성 중...[/cyan]")
+        # Synthesis & Report
+        report_status = "in_progress"
+        live.update(render_dashboard())
         try:
             corpus_summary = synthesize_corpus_summary(
                 client, results, temperature=args.temperature, max_output_tokens=args.max_tokens
@@ -137,13 +182,14 @@ def main(argv: List[str] = None) -> int:
             console.print(f"[red]종합 요약 실패:[/red] {e}")
             corpus_summary = "종합 요약 생성 실패 (LM Studio 서버 동작 여부 확인 필요)"
 
-        # Report
-        progress.log("[cyan]리포트 생성 중...[/cyan]")
         try:
             out_path = generate_report(report_dir, corpus_summary, results)
-            progress.log(f"[bold green]보고서 생성 완료:[/bold green] {out_path}")
+            console.print(f"[bold green]보고서 생성 완료:[/bold green] {out_path}")
         except Exception as e:
             console.print(f"[red]리포트 생성 실패:[/red] {e}")
+        finally:
+            report_status = "done"
+            live.update(render_dashboard())
 
     console.print("완료.")
     return 0

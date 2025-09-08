@@ -24,6 +24,22 @@ build:
 run:
 	$(PYTHON) -m src.paper_analyzer.cli --input-dir ./sample_data
 
+# --- Clean outputs ---
+.PHONY: clean clean-artifacts clean-report
+
+# Remove generated artifacts (figures, text, metadata, cache)
+clean-artifacts:
+	rm -rf artifacts
+	@echo "Removed artifacts/"
+
+# Remove generated reports
+clean-report:
+	rm -rf report
+	@echo "Removed report/"
+
+# Remove both artifacts and report
+clean: clean-artifacts clean-report
+
 # --- Conda helpers ---
 .PHONY: conda-check conda-setup conda-dev conda-run activate
 
