@@ -43,6 +43,7 @@
   - `--max-chars`: 청크 최대 문자수(기본 `4000`)
   - `--max-tokens`: LLM 출력 토큰 상한(기본 `512`)
   - `--clusters`: 클러스터 수(기본 `3`)
+  - `--chunk-summary-words`: 각 청크 요약 단어 수 범위 또는 값(예: `120-160` 또는 `150`; 기본 `120-160`)
   - `--instruction-file`: 사전 지시 파일 경로. 미지정 시 현재 작업 디렉터리의 `instruction.md`가 있으면 자동 적용
 
 ## instruction.md 사전 지시 적용

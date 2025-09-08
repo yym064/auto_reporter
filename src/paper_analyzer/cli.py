@@ -37,6 +37,11 @@ def main(argv: List[str] = None) -> int:
     parser.add_argument("--max-chars", type=int, default=4000, help="청크 최대 문자수")
     parser.add_argument("--clusters", type=int, default=3, help="클러스터 수")
     parser.add_argument("--max-tokens", type=int, default=512, help="LLM 최대 출력 토큰")
+    parser.add_argument(
+        "--chunk-summary-words",
+        default="120-160",
+        help="청크 요약 단어 수(예: '120-160' 또는 '150')",
+    )
     parser.add_argument("--instruction-file", default=None, help="사전 지시 사항 파일 경로 (기본: ./instruction.md 존재 시 자동 사용)")
     parser.add_argument("--interactive", action="store_true", help="실행 전 대화형으로 옵션 수정")
 
@@ -61,6 +66,10 @@ def main(argv: List[str] = None) -> int:
                 args.max_chars = IntPrompt.ask("청크 최대 문자수", default=args.max_chars)
                 args.max_tokens = IntPrompt.ask("LLM 최대 출력 토큰", default=args.max_tokens)
                 args.clusters = IntPrompt.ask("클러스터 수", default=args.clusters)
+                args.chunk_summary_words = Prompt.ask(
+                    "청크 요약 단어 수 (예: 120-160 또는 150)",
+                    default=str(args.chunk_summary_words),
+                )
             except Exception:
                 console.print("[red]대화형 입력 처리 중 오류가 발생했습니다. 기본값으로 진행합니다.[/red]\n")
         else:
@@ -188,6 +197,7 @@ def main(argv: List[str] = None) -> int:
                     temperature=args.temperature,
                     max_output_tokens=args.max_tokens,
                     on_progress=on_progress,
+                    chunk_summary_words=args.chunk_summary_words,
                 )
                 # If no callbacks fired (e.g., empty text), mark as done appropriately
                 if tasks[pid]["summarize"] == "pending":

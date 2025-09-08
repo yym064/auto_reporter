@@ -10,8 +10,9 @@ def summarize_single_paper(
     paper_meta: Dict,
     max_chunk_chars: int = 4000,
     temperature: float = 0.2,
-    max_output_tokens: int | None = None,
+    max_output_tokens: Optional[int] = None,
     on_progress: Optional[Callable[[str, Dict], None]] = None,
+    chunk_summary_words: Optional[str] = "120-160",
 ) -> str:
     """Map-reduce style summarization for a single paper."""
     title = paper_meta.get("title") or paper_meta.get("paper_id")
@@ -26,11 +27,34 @@ def summarize_single_paper(
             pass
 
     chunk_summaries: List[str] = []
+    # Build word constraint text for chunk summaries
+    word_clause = None
+    if chunk_summary_words:
+        txt = str(chunk_summary_words).strip()
+        # normalize spaces
+        txt = txt.replace(" ", "")
+        if txt.isdigit():
+            word_clause = f"{int(txt)} words."
+        elif "-" in txt:
+            parts = txt.split("-", 1)
+            try:
+                lo = int(parts[0])
+                hi = int(parts[1])
+                if lo > 0 and hi >= lo:
+                    word_clause = f"{lo}-{hi} words."
+            except ValueError:
+                word_clause = None
+        # Fallback: use as-is if it ends with 'words' or 'word'
+        if not word_clause:
+            cleaned = chunk_summary_words.strip()
+            if cleaned:
+                word_clause = cleaned if cleaned.lower().endswith("word") or cleaned.lower().endswith("words") else f"{cleaned} words."
+
     for i, ch in enumerate(chunks):
         prompt = (
             f"You are analyzing a research paper titled: {title}.\n"
             "Summarize the following excerpt focusing on: problem, method, data, key results, and limitations.\n"
-            "Use concise academic tone. 120-160 words.\n\n"
+            f"Use concise academic tone. {word_clause or '120-160 words.'}\n\n"
             f"Excerpt {i+1}/{len(chunks)}:\n" + ch
         )
         content = client.chat_complete([
@@ -76,7 +100,7 @@ def synthesize_corpus_summary(
     client: LMStudioClient,
     paper_summaries: List[Dict],
     temperature: float = 0.2,
-    max_output_tokens: int | None = None,
+    max_output_tokens: Optional[int] = None,
 ) -> str:
     """Create an overall synthesis across all papers."""
     bullets = []
