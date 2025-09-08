@@ -1,0 +1,766 @@
+JPEG COMPLIANT COMPRESSION FOR DNN VISION
+Kaixiang Zheng∗, Ahmed H. Salamah∗, Linfeng Ye∗, and En-Hui Yang, Fellow, IEEE
+{k56zheng,ahamsalamah,l44ye,ehyang}@uwaterloo.ca
+ABSTRACT
+Conventional image compression techniques are mostly de-
+veloped for the human visual system.
+However, with the
+extensive use of deep neural networks (DNNs), more and
+more images will be consumed by DNN-based intelligent
+machines, which makes it crucial to develop image com-
+pression techniques customized for DNN vision while being
+JPEG compliant. In this paper, we first propose a new distor-
+tion measure, dubbed the sensitivity weighted error (SWE).
+Then, we develop OptS, a DNN-oriented compression algo-
+rithm with full JPEG compatibility, which designs optimal
+quantization tables for DNN models based on SWE. To test
+the performance of our algorithm, experiments of image clas-
+sification are conducted on the ImageNet dataset for two
+prevailing DNN models. Results demonstrate that our algo-
+rithm achieves better rate-accuracy (R-A) performance than
+the default JPEG. For some DNN model, the compression
+ratio of our algorithm can reach 8.3×1, reducing the com-
+pression rate (bits per pixel, bpp) of the default JPEG by
+57.4% with no accuracy loss. Our source code is available at
+https://github.com/zkxufo/OptS.git.
+Index Terms— Image compression, deep learning, JPEG,
+quantization table, distortion measure.
+1. INTRODUCTION
+Image compression is one of the fundamental domains in
+image processing and computer vision (CV), which has been
+well developed in the past decades. Among all image com-
+pression approaches, JPEG [1] has become the defacto one,
+considering its extensive application. JPEG is a lossy com-
+pression technique developed for the human visual system,
+dubbed human-oriented compression (HOC) in this paper.
+HOC algorithms can aggressively compress an image as they
+allow information loss during compression which is imper-
+ceptible for humans.
+With the success of deep learning, a dramatic change is
+now happening in terms of how images are consumed. In
+the last decade, numerous deep neural networks (DNNs) have
+This work was supported in part by the Natural Sciences and Engineer-
+ing Research Council of Canada under Grant RGPIN203035-22, and by the
+Canada Research Chairs Program. All authors are affiliated to the Depart-
+ment of Electrical and Computer Engineering, University of Waterloo.
+∗These authors contributed equally to this work.
+1The compression ratio equals 24 divided by the compression rate.
+been proposed and used for CV tasks, such as image classi-
+fication [2, 3], semantic segmentation [4, 5], object detection
+[6, 7], image generation [8, 9], etc. More and more images
+have been and will continue to be viewed by DNN-based in-
+telligent machines, where humans would step in only when
+these intelligent machines fail their vision tasks. However,
+DNN perception differs in general from human perception
+[10]. The information loss incurred in the process of HOC
+may not be imperceptible for DNNs anymore, resulting in de-
+graded DNN performance [11].
+To aggressively compress images without sacrificing
+DNN’s performance, DNN-oriented compression (DOC)
+techniques are of urgent need. So far, there are only a few of
+research works addressing the DOC problem [12], [10], [13].
+These existing approaches, however, either do not provide a
+better rate-accuracy (R-A) tradeoff compared to the default
+JPEG, or are computationally expensive.
+In this paper, we first propose a new distortion measure
+dubbed the sensitivity weighted error (SWE). Given a DNN,
+the SWE distortion measure is customized for the vision of
+that DNN, based on the sensitivity of the training loss func-
+tion of that DNN with respect to perturbations in the discrete
+cosine transform (DCT) domain. With the SWE distortion
+measure, any DCT-based HOC algorithm including JPEG can
+be converted to a DOC algorithm without additional complex-
+ity. Based on SWE, we then develop OptS, a DOC algorithm
+with full JPEG compatibility, which designs optimal quanti-
+zation tables for JPEG in conjunction with SWE. It is shown
+experimentally that when evaluated on the ImageNet valida-
+tion set [14], our proposed DOC algorithm can improve the
+classification accuracy of tested popular DNNs by as much as
+0.93% over the default JPEG at the same compression rate in
+bits per pixel (bpp), or reduce the compression rate of the de-
+fault JPEG by as much as 57.4% at the same accuracy. More-
+over, if we tolerate some accuracy loss up to 0.47%, then our
+compression ratio can even reach 13.3×, reducing the com-
+pression rate of the default JPEG by 73.5%.
+The rest of the paper is organized as follows. We for-
+mulate the problem in Section 2 and propose our method in
+Section 3, with experimental results shown in Section 4.
+2. PROBLEM FORMULATION
+In JPEG, an encoder first partitions an image x into B non-
+overlapping 8 × 8 blocks, and then applies DCT to each of
+1875
+978-1-7281-9835-4/23/$31.00 ©2023 IEEE
+ICIP 2023
+2023 IEEE International Conference on Image Processing (ICIP) | 978-1-7281-9835-4/23/$31.00 ©2023 IEEE | DOI: 10.1109/ICIP49359.2023.10221982
+Authorized licensed use limited to: Korea Electronics Technology Institute. Downloaded on September 05,2025 at 08:04:36 UTC from IEEE Xplore.  Restrictions apply. 
+
+these non-overlapping blocks to obtain DCT coefficients C.
+After flattening the DCT coefficients in each block in the
+zigzag order, we get M = 64 sequences {Ci}M
+i=1 of DCT
+coefficients, each with length B, where each sequence Ci =
+{Ci,j}B
+j=1 corresponds to a distinct DCT frequency position
+1 ≤i ≤M. We further model these sequences as indepen-
+dent sources.
+After DCT, the next step of JPEG is to perform quanti-
+zation. Define a quantization table Q = {q1, q2, . . . , qM},
+where qi is the quantization step size for Ci. Given Q, we
+can quantize DCT coefficients Ci,j into DCT indices Ki,j by
+Ki,j = ⌊Ci,j/qi⌉. This step is also referred to as hard deci-
+sion quantization (HDQ). Note that Ki = {Ki,j}B
+j=1 is the
+sequence of DCT indices corresponding to the ith frequency
+position. As is well known, quantization is the step where
+distortion is introduced, which makes JPEG a lossy compres-
+sion technique. Finally, a lossless coding method is utilized
+to encode the DCT indices.
+With the adoption of HDQ, JPEG compression can be for-
+mulated as the following optimization problem
+inf
+Q R(Q), s.t. D(Q) ≤DT ,
+(1)
+where R(Q) denotes the number of bits per block resulting
+from quantization and lossless coding, D(Q) is the distortion
+per block introduced by the quantization process, and DT is
+the prescribed block-wise distortion budget. In this problem,
+we are optimizing over Q, because both R and D are solely
+dependent on Q given a fixed lossless coding method. There-
+fore, the JPEG compliant image compression problem can be
+formulated as a quantization table designing problem.
+Decompose D(Q) over different sources into D(Q) =
+PM
+i=1 D(Ci, qi), where D(Ci, qi) is the average distortion of
+Ci with quantization step size qi. Then, we can rewrite (1)
+into an equivalent problem
+inf
+Q:D(Ci,qi)≤Di,∀i
+PM
+i=1 Di=DT
+R(Q),
+(2)
+where Di is the portion of distortion budget allocated to
+the ith source.
+Consider the inequality constraints in (2):
+D(Ci, qi) ≤Di, 1 ≤i ≤M. Given an image x and a
+specific distortion measure, Ci and D(·, ·) are fixed, so the
+selection of qi is determined by Di. Therefore, designing
+an optimal quantization table Q∗is equivalent to finding an
+optimal distortion allocation {D∗
+i }M
+i=1.
+For HOC, Problem (2) has already been solved in [15] by
+Yang et al. In this paper, we focus on solving (2) for DOC, by
+first proposing a new distortion measure D(·, ·) customized
+for DNN vision.
+3. METHODOLOGY
+3.1. DNN’s Sensitivity to DCT Perturbations
+Following the previous formulation, we can see that distor-
+tion is of pivot significance in our problem. Therefore, a nat-
+ural question is how to measure the distortion in the case of
+DOC. Conventionally, in the case of HOC, mean squared er-
+ror (MSE) is widely used to measure the distortion between
+the original DCT coefficients Ci,j and quantized DCT coef-
+ficients qiKi,j: D(Ci, qi) =
+1
+B
+PB
+j=1(Ci,j −qiKi,j)2 for
+all 1 ≤i ≤M. Note that in MSE, all DCT frequencies
+are treated equally. For DNN vision, however, it was ob-
+served in [10] that DNN’s sensitivity varies across DCT fre-
+quencies. This motivates us to differentiate the distortions re-
+sulting from the quantization of different sources Ci. To this
+end, let us formally define DNN’s sensitivity to DCT pertur-
+bations.
+Given a DNN, we denote its loss function used in its train-
+ing stage as L(·). Suppose ∆C amount of perturbation is
+added to the DCT coefficients C of an image. We want to
+understand how sensitive the loss function L(·) of the DNN
+is with respect to the perturbation ∆C. To simplify our dis-
+cussion, the derivation below is limited to a single channel of
+an image, but can be easily extended to the multiple channels
+of the image. By Taylor expansion, we have
+L(C + ∆C) = L(C) + [∇L(C)]T ∆C + o(||∆C||)
+(3)
+when ∆C is small enough, where ∇L(C) is the gradient vec-
+tor of L(·) with respect to C, and ||∆C|| denotes the l2 norm
+of ∆C. Therefore, the loss increase caused by the perturba-
+tion is upper bounded by
+|∆L| = |L(C + ∆C) −L(C)| ≤|[∇L(C)]T ∆C| + |o(||∆C||)|
+=
+
+M
+X
+i=1
+dL
+dCT
+i
+∆Ci
+ + |o(||∆C||)|
+≤
+M
+X
+i=1
+
+dL
+dCT
+i
+∆Ci
+ + |o(||∆C||)|
+≤
+M
+X
+i=1
+v
+u
+u
+t
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
+·
+B
+X
+j=1
+∆C2
+i,j + |o(||∆C||)|
+(4)
+where the last inequality follows from the Cauchy–Schwarz
+inequality. Squaring both sides of (4), we have
+∆L2 ≤
+
+
+M
+X
+i=1
+v
+u
+u
+t
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
+·
+B
+X
+j=1
+∆C2
+i,j
+
+
+2
++ |o(||∆C||2)|
+≤M
+M
+X
+i=1
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
+·
+B
+X
+j=1
+∆C2
+i,j + o(||∆C||2)
+(5)
+Note that (5) is valid for any small perturbation ∆C. When
+the perturbation ∆C is limited only to the DCT frequency i,
+(5) then becomes
+∆L2 ≤
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
+· ||∆Ci||2 + o(||∆Ci||2)
+(6)
+where ||∆Ci||2 = PB
+j=1 ∆C2
+i,j. Therefore, the squared rate
+of change of L(·) with respect to Ci is upper bounded by
+∆L2
+||∆Ci||2 ≤
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
++ o(1)
+(7)
+1876
+Authorized licensed use limited to: Korea Electronics Technology Institute. Downloaded on September 05,2025 at 08:04:36 UTC from IEEE Xplore.  Restrictions apply. 
+
+In view of (7), we now define the given DNN’s sensitivity
+to the perturbation at the ith frequency position as
+si =
+B
+X
+j=1
+ ∂L
+∂Ci,j
+2
+=
+
+
+dL
+dCi
+
+
+2
+, 1 ≤i ≤M
+(8)
+Across all frequencies, DNN’s sensitivity can be character-
+ized by the set S = {s1, s2, . . . , sM}. Note that the computa-
+tion of such defined DNN’s sensitivity S = {s1, s2, . . . , sM}
+depends on the input image C (in the DCT domain), the DNN,
+and the ground truth label of the input image C, which may
+not be available at the encoder.
+3.2. Offline Estimation of the Sensitivity
+To remove the dependency on the availability of the DNN
+and the ground truth label of the input image C at the time of
+encoding, we estimate the sensitivity S for each target DNN
+offline.
+Specifically, for each target DNN, we first randomly select
+N image samples, and then estimate S by taking the sample
+mean of the sensitivity over the N image samples:
+si = 1
+N
+N
+X
+k=1
+B
+X
+j=1
+ 
+∂L
+∂Ck
+i,j
+!2
+, 1 ≤i ≤M
+(9)
+where Ck is the DCT coefficients of the kth input image xk.
+The partial derivatives in (9) are obtained through backprop-
+agation.
+3.3. Sensitivity Weighted Error (SWE)
+Go back to (5). Note that M = 64 is fixed. With the sen-
+sitivity S estimated via (9), we can now measure the distor-
+tions between the original DCT coefficients Ci,j and quan-
+tized DCT coefficients qiKi,j for each source Ci and for the
+whole image respectively as follows:
+D(Ci, qi) = 1
+B
+B
+X
+j=1
+si(Ci,j −qiKi,j)2, 1 ≤i ≤M
+(10)
+D(Q) = 1
+B
+M
+X
+i=1
+B
+X
+j=1
+si(Ci,j −qiKi,j)2.
+(11)
+The above distortion measure is called the sensitivity
+weighted error (SWE). In view of our derivation in Sub-
+section 3.1, the SWE for an image is a good estimation of
+the upper bound of the squared DNN loss increase caused by
+quantization. Minimizing the SWE subject to a rate constraint
+will in turn reduce the squared DNN loss increase.
+3.4. Optimal Allocation of SWE (OptS)
+Based on the proposed SWE, we now turn back to solve the
+distortion allocation problem formulated in Section 2. Actu-
+ally, to solve problem (2) for DOC, one can simply embed
+SWE into any existing algorithm for HOC as a substitute for
+Algorithm 1 OptS for the Luminance Channel
+Input: x, S = {s1, s2, . . . , sM}, d, qmax
+Output: Q = {q1, q2, . . . , qM}
+if siσ2
+i < d then
+set qi = qmax
+else
+if i = 1 then
+set qi = min
+njq
+12d
+si
+k
+, qmax
+o
+else
+set qi = max{qi ∈Q : DLap(λi, qi) ≤
+d
+si }
+end if
+end if
+the MSE, since SWE is a generic distortion measure inde-
+pendent of the algorithm. In this paper, we select the algo-
+rithm proposed in [15], named OptD, as the HOC baseline;
+and build the DOC counterpart, named OptS, upon it.
+In OptD, authors first model DC and AC coefficients with
+uniform and Laplacian distributions, so that D(C1, q1) =
+q2
+1/12 and D(Ci, qi), 2 ≤i ≤M, can be approximated by
+DLap(λi, qi) calculated in (14). Then, a parameter d named
+water level is determined given the distortion budget DT .
+With d and variances of sources {σ2
+i }M
+i=1, one can obtain
+the optimal distortion allocation {D∗
+i }M
+i=1 which leads to the
+optimal quantization table Q∗.
+λi = 1
+B
+B
+X
+j=1
+|Ci,j| , 2 ≤i ≤M
+(12)
+zi = qi −λi +
+qi
+eqi/λi −1
+(13)
+DLap(λi, qi) = 2λ2
+i −2qi(λi + zi −0.5qi)
+ezi/λi(1 −e−qi/λi)
+(14)
+However, OptD in [15] is proposed for grayscale images
+only, while most DNN models accept color images as inputs.
+Therefore, we have to extend OptD to accommodate color im-
+ages before updating it to OptS. Conventionally, color images
+are converted to the YCbCr format before compression. In
+fact, the compression of the luminance channel (Y) can be
+directly handled by the original OptD. However, one cannot
+apply the original OptD to chrominance channels (Cb and Cr)
+respectively to get two quantization tables, because chromi-
+nance channels share the same quantization table in the JPEG
+framework. Following the same principle of designing the
+single-channel OptD, we manage to develop a two-channel
+OptD for chrominance channels. Note that this extension is
+highly nontrivial because of the aforementioned restriction.
+Now that we have the complete version of OptD, we
+can update it to OptS by replacing MSE with SWE. The
+resulting algorithms for luminance and chrominance chan-
+nels are demonstrated in Alg. 1 and Alg. 2, where Q =
+{1, 2, . . . , qmax}, and qmax is a predetermined maximum
+quantization step size. Note that the sensitivity used in Alg.
+2 has 2M entries as it includes the sensitivity of both Cb
+and Cr channels. Also, some notations are overloaded in two
+algorithms for simplicity.
+1877
+Authorized licensed use limited to: Korea Electronics Technology Institute. Downloaded on September 05,2025 at 08:04:36 UTC from IEEE Xplore.  Restrictions apply. 
+
+2
+3
+4
+Rate (bpp)
+69.5
+70.0
+70.5
+71.0
+71.5
+Accuracy (%)
+OptS
+OptD
+JPEG
+(a) MobileNetV2
+2
+4
+6
+8
+Rate (bpp)
+56.0
+56.1
+56.2
+56.3
+56.4
+56.5
+Accuracy (%)
+OptS
+OptD
+JPEG
+(b) AlexNet
+2
+4
+6
+8
+Rate (bpp)
+69.5
+70.0
+70.5
+71.0
+71.5
+72.0
+Accuracy (%)
+OptS
+OptD
+JPEG
+(c) MobileNetV2
+2
+4
+6
+8
+Rate (bpp)
+55.50
+55.75
+56.00
+56.25
+56.50
+Accuracy (%)
+OptS
+OptD
+JPEG
+(d) AlexNet
+Fig. 1: Evaluation of the R-A performance. Fig. 1a and 1b correspond to Setting 1; Fig. 1c and 1d correspond to Setting 2. It
+is worth mentioning that for MobileNetV2 and AlexNet, DeepN-JPEG yields 68.43% and 52.07% of accuracy with the rate of
+7.9 bpp (its accuracy is low). Therefore, to avoid distortion, these points are removed from the figures.
+Algorithm 2 OptS for Chrominance Channels
+Input: x, S = {s1, . . . , sM, sM+1, . . . , s2M}, d, qmax
+Output: Q = {q1, q2, . . . , qM}
+if max{siσ2
+i , si+Mσ2
+i+M} < d then
+set qi = qmax
+else if siσ2
+i < d ≤si+Mσ2
+i+M then
+if i = 1 then
+set qi = min
+njq
+12d
+si+M
+k
+, qmax
+o
+else
+set qi = max{qi ∈Q : DLap(λi+M, qi) ≤
+d
+si+M }
+end if
+else if si+Mσ2
+i+M < d ≤siσ2
+i then
+if i = 1 then
+set qi = min
+njq
+12d
+si
+k
+, qmax
+o
+else
+set qi = max{qi ∈Q : DLap(λi, qi) ≤
+d
+si }
+end if
+else if d ≤min{siσ2
+i , si+Mσ2
+i+M} then
+if i = 1 then
+set qi = min
+njq
+12d
+max{si,si+M }
+k
+, qmax
+o
+else
+set qi
+=
+max
+n
+qi
+∈
+Q
+:
+DLap(λi, qi)
+≤
+d
+si , DLap(λi+M, qi) ≤
+d
+si+M
+o
+end if
+end if
+4. EXPERIMENTAL RESULTS
+To evaluate the performance of OptS, we select image clas-
+sification as our CV task. Accordingly, the loss function L
+represents the cross entropy loss. To estimate the sensitivity
+of tested DNN models following (9), we sample 10K images
+from the ImageNet ILSVRC 2012 training set [14] covering
+all classes. Note that all images are scaled to the size of 224
+× 224 following the standard preprocessing.
+Instead of the rate-distortion (R-D) performance in the
+HOC case, we evaluate the rate-accuracy (R-A) performance
+based on the ImageNet validation set [14]. Here, rate is mea-
+sured by the average bpp of an image, and accuracy is the
+top-1 validation accuracy. For comparison, we select the de-
+fault JPEG as our benchmark. Also, the performance of OptD
+is presented as an ablation study, in order to show the contri-
+bution of SWE alone. Two prevailing models, MobileNetV2
+[16] and AlexNet [17], are adopted as our target DNNs. In all
+experiments, qmax is selected to be 100.
+For JPEG, the quality of a compressed image is controlled
+by the quality factor (QF), while the counterpart in OptS or
+OptD is the water level d. A straightforward experimental de-
+sign is to use fix QF and d’s for three algorithms over the
+whole dataset.
+However, in this design, we have no con-
+trol over the image-wise distortion, and a lot of tuning is in-
+evitably involved. So, we design our experiments in a more
+sophisticated way to foster fair comparison without tuning.
+Setting 1: Use a fixed QF for JPEG to compress all the
+images in the dataset, and record all the resulting SWEs for
+them. Then, for each image, adjust the image-adaptive d’s
+in OptS and OptD to roughly match the recorded SWE using
+binary search.
+Setting 2: Use a fixed d for OptS to compress all the im-
+ages in the dataset, and record all the resulting SWEs for
+them. Then, for each image, adjust the image-adaptive QF
+in JPEG and d in OptD to do the distortion matching again.
+For Setting 1, results are shown in Fig. 1a and 1b, with QF
+∈[70, 98]; for Setting 2, results are shown in Fig. 1c and 1d,
+with d ∈[0.005, 1]. Some of these results are also shown in
+Table 1. As expected, OptS always performs better than OptD
+and JPEG in both settings. In addition, we also compare with
+an existing DOC algorithm called DeepN-JPEG [12], whose
+performance is mentioned in the caption of Fig. 1, yet we
+don’t compare with another DOC algorithm dubbed GRACE
+[10] as it’s not JPEG compliant.
+Model
+JPEG
+OptS
+Rate (bpp)
+Acc (%)
+Rate (bpp)
+Acc (%)
+MobileNetV2
+2.1
+69.53
+2.2
+70.46
+AlexNet
+6.8
+56.51
+2.9
+56.47
+AlexNet
+6.8
+56.51
+1.8
+56.04
+Table 1: Comparison between JPEG and OptS.
+Interestingly, our experiments also show that for small d,
+compression with OptS actually yields the accuracy slightly
+better than the inference accuracy of the raw dataset, confirm-
+ing the prediction made in [18] in practice. Specifically, com-
+pared to the raw dataset without compression, OptS improves
+the original accuracy of MobileNetV2 (71.878%) by 0.054%
+with 4.2× compression ratio, and that of AlexNet (56.522%)
+by 0.028% with 4.0× compression ratio.
+1878
+Authorized licensed use limited to: Korea Electronics Technology Institute. Downloaded on September 05,2025 at 08:04:36 UTC from IEEE Xplore.  Restrictions apply. 
+
+5. REFERENCES
+[1] William B Pennebaker and Joan L Mitchell, JPEG: Still
+image data compression standard, Springer Science &
+Business Media, 1992.
+[2] Karen Simonyan and Andrew Zisserman, “Very deep
+convolutional networks for large-scale image recogni-
+tion,” arXiv preprint arXiv:1409.1556, 2014.
+[3] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian
+Sun, “Deep residual learning for image recognition,” in
+Proceedings of the IEEE conference on computer vision
+and pattern recognition, 2016, pp. 770–778.
+[4] Jonathan Long, Evan Shelhamer, and Trevor Darrell,
+“Fully convolutional networks for semantic segmenta-
+tion,” in Proceedings of the IEEE conference on com-
+puter vision and pattern recognition, 2015, pp. 3431–
+3440.
+[5] Olaf Ronneberger, Philipp Fischer, and Thomas Brox,
+“U-net:
+Convolutional networks for biomedical im-
+age segmentation,” in Medical Image Computing and
+Computer-Assisted Intervention–MICCAI 2015: 18th
+International Conference, Munich, Germany, October
+5-9, 2015, Proceedings, Part III 18. Springer, 2015, pp.
+234–241.
+[6] Ross Girshick, Jeff Donahue, Trevor Darrell, and Jiten-
+dra Malik, “Rich feature hierarchies for accurate object
+detection and semantic segmentation,” in Proceedings
+of the IEEE conference on computer vision and pattern
+recognition, 2014, pp. 580–587.
+[7] Ross Girshick, “Fast r-cnn,” in Proceedings of the IEEE
+international conference on computer vision, 2015, pp.
+1440–1448.
+[8] Diederik P Kingma and Max Welling, “Auto-encoding
+variational bayes,”
+arXiv preprint arXiv:1312.6114,
+2013.
+[9] Ian Goodfellow, Jean Pouget-Abadie, Mehdi Mirza,
+Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron
+Courville, and Yoshua Bengio, “Generative adversar-
+ial networks,” Communications of the ACM, vol. 63, no.
+11, pp. 139–144, 2020.
+[10] Xiufeng Xie and Kyu-Han Kim, “Source compression
+with bounded dnn perception loss for iot edge computer
+vision,” in The 25th Annual International Conference
+on Mobile Computing and Networking, 2019, pp. 1–16.
+[11] Neelanjan Bhowmik, Jack W Barker, Yona Falinie A
+Gaus, and Toby P Breckon, “Lost in compression: the
+impact of lossy image compression on variable size ob-
+ject detection within infrared imagery,” in Proceedings
+of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 2022, pp. 369–378.
+[12] Zihao Liu, Tao Liu, Wujie Wen, Lei Jiang, Jie Xu,
+Yanzhi Wang, and Gang Quan, “Deepn-jpeg: A deep
+neural network favorable jpeg-based image compression
+framework,” in Proceedings of the 55th annual design
+automation conference, 2018, pp. 1–6.
+[13] Hongshan Li, Yu Guo, Zhi Wang, Shutao Xia, and
+Wenwu Zhu,
+“Adacompress: Adaptive compression
+for online computer vision services,” in Proceedings of
+the 27th ACM International Conference on Multimedia,
+2019, pp. 2440–2448.
+[14] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li,
+and Li Fei-Fei, “Imagenet: A large-scale hierarchical
+image database,” in 2009 IEEE conference on computer
+vision and pattern recognition. Ieee, 2009, pp. 248–255.
+[15] En-Hui Yang, Chang Sun, and Jin Meng, “Quantization
+table design revisited for image/video coding,”
+IEEE
+Transactions on Image Processing, vol. 23, no. 11, pp.
+4799–4811, 2014.
+[16] Mark Sandler, Andrew Howard, Menglong Zhu, Andrey
+Zhmoginov, and Liang-Chieh Chen, “Mobilenetv2: In-
+verted residuals and linear bottlenecks,” in Proceedings
+of the IEEE conference on computer vision and pattern
+recognition, 2018, pp. 4510–4520.
+[17] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hin-
+ton, “ImageNet classification with deep convolutional
+neural networks,”
+in Advances in neural information
+processing systems, 2012, pp. 1097–1105.
+[18] En-hui Yang, Hossan Amer, and Yanbing Jiang, “Com-
+pression helps deep learning in image classification,”
+Entropy (https://doi.org/10.3390/e23070881), 2021.
+1879
+Authorized licensed use limited to: Korea Electronics Technology Institute. Downloaded on September 05,2025 at 08:04:36 UTC from IEEE Xplore.  Restrictions apply. 
