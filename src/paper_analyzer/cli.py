@@ -31,7 +31,7 @@ def main(argv: List[str] = None) -> int:
     parser.add_argument("--input-dir", required=True, help="PDF 폴더 경로")
     parser.add_argument("--artifacts-dir", default="artifacts", help="아티팩트 출력 폴더")
     parser.add_argument("--report-dir", default="report", help="보고서 출력 폴더")
-    parser.add_argument("--model", default="TheBloke/Mistral-7B-Instruct-v0.2-GGUF", help="LM Studio 모델명")
+    parser.add_argument("--model", default="openai/gpt-oss-20b", help="LM Studio 모델명")
     parser.add_argument("--lmstudio-url", default=os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"), help="LM Studio base URL")
     parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--max-chars", type=int, default=4000, help="청크 최대 문자수")

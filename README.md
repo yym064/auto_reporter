@@ -37,7 +37,7 @@
 - 주요 옵션:
   - `--artifacts-dir`: 아티팩트 출력 폴더(기본 `artifacts`)
   - `--report-dir`: 보고서 출력 폴더(기본 `report`)
-  - `--model`: LM Studio 모델명(기본 `TheBloke/Mistral-7B-Instruct-v0.2-GGUF`)
+  - `--model`: LM Studio 모델명(기본 `openai/gpt-oss-20b`)
   - `--lmstudio-url`: LM Studio API Base URL (기본 `http://localhost:1234/v1`)
   - `--temperature`: 샘플링 온도(기본 `0.2`)
   - `--max-chars`: 청크 최대 문자수(기본 `4000`)
