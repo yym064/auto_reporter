@@ -37,7 +37,7 @@ class LMStudioClient:
         temperature: float = 0.2,
         max_tokens: Optional[int] = None,
         retries: int = 3,
-        retry_delay_sec: float = 1.0,
+        retry_delay_sec: float = 3.0,
     ) -> str:
         """Call chat/completions with fallback and simple retries.
 
